@@ -16,15 +16,16 @@ export async function loadModel() {
   ready = true;
 }
 
-// On web: pass a canvas element directly — face-api.js handles it natively
+// On web: pass an HTMLVideoElement — face-api.js handles it natively, no TF tensor needed
 // On native: pass { data: Uint8Array (RGBA), width, height }
 export async function detectLandmarks(input) {
   if (!ready) return null;
 
   let source;
+  let isTensor = false;
 
-  if (input instanceof HTMLCanvasElement) {
-    // Web path — face-api.js accepts canvas directly, no conversion needed
+  if (typeof HTMLVideoElement !== "undefined" && input instanceof HTMLVideoElement) {
+    // Web path — pass video element directly, face-api handles it without TF ops
     source = input;
   } else {
     // Native path — convert RGBA bytes to RGB tensor
@@ -36,13 +37,14 @@ export async function detectLandmarks(input) {
       rgbData[j + 2] = data[i + 2];
     }
     source = tf.tensor3d(rgbData, [height, width, 3], "int32");
+    isTensor = true;
   }
 
   const result = await faceapi
     .detectSingleFace(source, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks(true);
 
-  if (!(source instanceof HTMLCanvasElement)) source.dispose();
+  if (isTensor) source.dispose();
 
   return result?.landmarks?.positions ?? null;
 }

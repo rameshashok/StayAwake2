@@ -116,13 +116,11 @@ export default function App() {
           if (result != null) setEar(result.toFixed(2));
 
         } else if (IS_WEB) {
-          // Web live camera path
+          // Web live camera path — pass video element directly to face-api.js
           try {
-            const { captureFrame } = require("./src/webCamera");
-            const canvas = captureFrame(videoRef.current, canvasRef.current);
-            if (canvas) {
+            if (videoRef.current && videoRef.current.readyState >= 2) {
               const { detectLandmarks } = require("./src/mlModel");
-              const keypoints = await detectLandmarks(canvas);
+              const keypoints = await detectLandmarks(videoRef.current);
               const result = detectorRef.current?.processKeypoints(keypoints);
               if (result != null) setEar(result.toFixed(2));
             }
@@ -189,7 +187,6 @@ export default function App() {
               transform: "scaleX(-1)", display: simMode ? "none" : "block" }}
             muted playsInline
           />
-          <canvas ref={canvasRef} style={{ display: "none" }} />
           {simMode && <Text style={styles.simLabel}>[ Simulation Mode ]</Text>}
           {!simMode && webCamError && <Text style={styles.errorLabel}>{webCamError}</Text>}
         </View>
