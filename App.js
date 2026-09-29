@@ -36,6 +36,7 @@ export default function App() {
   const [simState, setSimState]     = useState("open");
   const [permission, setPermission] = useState(null);
   const [webCamError, setWebCamError] = useState(null);
+  const [debugMsg, setDebugMsg] = useState("");
 
   const cameraRef   = useRef(null);  // native CameraView ref
   const videoRef    = useRef(null);  // web <video> element ref
@@ -116,15 +117,21 @@ export default function App() {
           if (result != null) setEar(result.toFixed(2));
 
         } else if (IS_WEB) {
-          // Web live camera path — pass video element directly to face-api.js
           try {
             if (videoRef.current && videoRef.current.readyState >= 2) {
               const { detectLandmarks } = require("./src/mlModel");
               const keypoints = await detectLandmarks(videoRef.current);
-              const result = detectorRef.current?.processKeypoints(keypoints);
-              if (result != null) setEar(result.toFixed(2));
+              if (!keypoints) {
+                setDebugMsg("No face detected");
+              } else {
+                setDebugMsg("");
+                const result = detectorRef.current?.processKeypoints(keypoints);
+                if (result != null) setEar(result.toFixed(2));
+              }
+            } else {
+              setDebugMsg("Video not ready");
             }
-          } catch (_) { /* skip frame */ }
+          } catch (e) { setDebugMsg("Error: " + e.message); }
 
         } else if (cameraRef.current && permission) {
           // Native live camera path
@@ -184,11 +191,12 @@ export default function App() {
           <video
             ref={videoRef}
             style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover",
-              transform: "scaleX(-1)", display: simMode ? "none" : "block" }}
+              display: simMode ? "none" : "block" }}
             muted playsInline
           />
           {simMode && <Text style={styles.simLabel}>[ Simulation Mode ]</Text>}
           {!simMode && webCamError && <Text style={styles.errorLabel}>{webCamError}</Text>}
+          {!simMode && debugMsg ? <Text style={styles.debugLabel}>{debugMsg}</Text> : null}
         </View>
       ) : !simMode && CameraView ? (
         <CameraView style={styles.camera} facing="front" ref={cameraRef} />
@@ -259,6 +267,7 @@ const styles = StyleSheet.create({
   camera:       { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000", overflow: "hidden" },
   simLabel:     { color: "#333", fontSize: 14 },
   errorLabel:   { color: "#e53935", fontSize: 13, textAlign: "center", padding: 20 },
+  debugLabel:   { color: "#ffb300", fontSize: 12, textAlign: "center", padding: 4, backgroundColor: "rgba(0,0,0,0.5)" },
   overlay:      { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "space-between", padding: 40 },
   header:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20 },
   title:        { color: "#fff", fontSize: 28, fontWeight: "bold" },
