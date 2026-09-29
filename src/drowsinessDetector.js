@@ -6,9 +6,10 @@
 const LEFT_EYE  = [36, 37, 38, 39, 40, 41];
 const RIGHT_EYE = [42, 43, 44, 45, 46, 47];
 
-const EAR_THRESHOLD  = 0.21;
-const DROWSY_MS      = 2000;
-const MIN_BLINKS_MIN = 8;
+const DROWSY_MS        = 2000;
+const MIN_BLINKS_MIN   = 8;
+const CALIBRATION_MS   = 3000; // collect baseline for 3 seconds
+const CLOSED_RATIO     = 0.80; // threshold = baseline * this
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -25,6 +26,11 @@ export class DrowsinessDetector {
     this.eyeClosedSince = null;
     this.blinkTimestamps = [];
     this.alertActive = false;
+    // Calibration
+    this.calibrating = true;
+    this.calibrationStart = Date.now();
+    this.calibrationSamples = [];
+    this.threshold = null; // set after calibration
   }
 
   // positions: array of 68 {x,y} points from face-api.js
@@ -35,7 +41,20 @@ export class DrowsinessDetector {
     }
 
     const ear = (eyeAspectRatio(positions, LEFT_EYE) + eyeAspectRatio(positions, RIGHT_EYE)) / 2;
-    const eyesClosed = ear < EAR_THRESHOLD;
+
+    // Calibration phase — collect open-eye EAR samples
+    if (this.calibrating) {
+      this.calibrationSamples.push(ear);
+      const elapsed = Date.now() - this.calibrationStart;
+      if (elapsed >= CALIBRATION_MS) {
+        const avg = this.calibrationSamples.reduce((a, b) => a + b, 0) / this.calibrationSamples.length;
+        this.threshold = avg * CLOSED_RATIO;
+        this.calibrating = false;
+      }
+      return { ear, calibrating: true, progress: Math.min((Date.now() - this.calibrationStart) / CALIBRATION_MS, 1) };
+    }
+
+    const eyesClosed = ear < this.threshold;
     const now = Date.now();
 
     if (eyesClosed) {

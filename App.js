@@ -37,6 +37,7 @@ export default function App() {
   const [permission, setPermission] = useState(null);
   const [webCamError, setWebCamError] = useState(null);
   const [debugMsg, setDebugMsg] = useState("");
+  const [calibProgress, setCalibProgress] = useState(0); // 0-1
 
   const cameraRef   = useRef(null);  // native CameraView ref
   const videoRef    = useRef(null);  // web <video> element ref
@@ -126,15 +127,22 @@ export default function App() {
               } else {
                 setDebugMsg("");
                 const result = detectorRef.current?.processKeypoints(keypoints);
-                if (result != null) setEar(result.toFixed(2));
+                if (result != null) {
+                  if (result?.calibrating) {
+                    setCalibProgress(result.progress);
+                    setEar(result.ear.toFixed(2));
+                  } else {
+                    setCalibProgress(1);
+                    setEar(result.toFixed(2));
+                  }
+                }
               }
             } else {
               setDebugMsg("Video not ready");
             }
           } catch (e) { setDebugMsg("Error: " + e.message); }
 
-        } else if (cameraRef.current && permission) {
-          // Native live camera path
+        } else if (!IS_WEB && cameraRef.current && permission) {
           try {
             const photo = await cameraRef.current.takePictureAsync({
               base64: false, quality: 0.2, skipProcessing: true, exif: false,
@@ -146,7 +154,15 @@ export default function App() {
             const { detectLandmarks } = await import("./src/mlModel");
             const keypoints = await detectLandmarks({ data, width, height });
             const result = detectorRef.current?.processKeypoints(keypoints);
-            if (result != null) setEar(result.toFixed(2));
+            if (result != null) {
+              if (result?.calibrating) {
+                setCalibProgress(result.progress);
+                setEar(result.ear.toFixed(2));
+              } else {
+                setCalibProgress(1);
+                setEar(result.toFixed(2));
+              }
+            }
           } catch (_) { /* skip frame */ }
         }
       }
@@ -165,6 +181,7 @@ export default function App() {
     const next = !simModeRef.current;
     simModeRef.current = next;
     setSimMode(next);
+    setCalibProgress(next ? 1 : 0);
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
     setEar(null);
   };
@@ -173,6 +190,7 @@ export default function App() {
     await alertService.stop();
     setStatus("monitoring");
     setReason("");
+    setCalibProgress(0);
     simStateRef.current = "open";
     setSimState("open");
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
@@ -218,6 +236,13 @@ export default function App() {
           <View style={styles.statusBox}>
             <ActivityIndicator color="#fff" style={{ marginRight: 10 }} />
             <Text style={styles.statusText}>Loading ML model...</Text>
+          </View>
+        ) : calibProgress < 1 && !simMode ? (
+          <View style={styles.calibBox}>
+            <Text style={styles.calibText}>Calibrating... keep eyes open</Text>
+            <View style={styles.calibBarBg}>
+              <View style={[styles.calibBarFill, { width: `${calibProgress * 100}%` }]} />
+            </View>
           </View>
         ) : status === "drowsy" ? (
           <View style={styles.alertBox}>
@@ -282,7 +307,10 @@ const styles = StyleSheet.create({
   alertText:    { color: "#fff", fontSize: 22, fontWeight: "bold", marginBottom: 6 },
   alertReason:  { color: "#ffd", fontSize: 15, marginBottom: 20 },
   dismissBtn:   { backgroundColor: "#fff", paddingHorizontal: 32, paddingVertical: 12, borderRadius: 30 },
-  simControls:  { backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 20, marginBottom: 30, alignItems: "center" },
+  calibBox:     { alignItems: "center", marginBottom: 30 },
+  calibText:    { color: "#fff", fontSize: 14, marginBottom: 8 },
+  calibBarBg:   { width: 200, height: 6, backgroundColor: "#333", borderRadius: 3 },
+  calibBarFill: { height: 6, backgroundColor: "#00e676", borderRadius: 3 }, backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 20, marginBottom: 30, alignItems: "center" },
   simTitle:     { color: "#aaa", fontSize: 13, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 },
   simButtons:   { flexDirection: "row", gap: 10, marginBottom: 12 },
   simBtn:       { backgroundColor: "#2a2a4a", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: "#444" },
