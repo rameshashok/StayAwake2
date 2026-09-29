@@ -133,7 +133,8 @@ export default function App() {
                     setEar(result.ear.toFixed(2));
                   } else {
                     setCalibProgress(1);
-                    setEar(result.toFixed(2));
+                    setEar(result.ear.toFixed(2));
+                    setDebugMsg(`EAR:${result.ear.toFixed(2)} thr:${result.threshold?.toFixed(2)} ${result.eyesClosed ? "CLOSED" : "open"}`);
                   }
                 }
               }
@@ -160,7 +161,7 @@ export default function App() {
                 setEar(result.ear.toFixed(2));
               } else {
                 setCalibProgress(1);
-                setEar(result.toFixed(2));
+                setEar(result.ear.toFixed(2));
               }
             }
           } catch (_) { /* skip frame */ }

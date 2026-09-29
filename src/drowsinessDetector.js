@@ -1,15 +1,11 @@
-// face-api.js 68-point landmark indices
-// Left eye:  36,37,38,39,40,41  → [p1,p2,p3,p4,p5,p6]
-// Right eye: 42,43,44,45,46,47
-// EAR = (|p2-p6| + |p3-p5|) / (2 * |p1-p4|)
-
 const LEFT_EYE  = [36, 37, 38, 39, 40, 41];
 const RIGHT_EYE = [42, 43, 44, 45, 46, 47];
 
 const DROWSY_MS        = 2000;
 const MIN_BLINKS_MIN   = 8;
-const CALIBRATION_MS   = 3000; // collect baseline for 3 seconds
-const CLOSED_RATIO     = 0.80; // threshold = baseline * this
+const CALIBRATION_MS   = 3000;
+const CLOSED_RATIO     = 0.75; // more aggressive: 75% of baseline
+const MAX_MISS_MS      = 500;  // tolerate up to 500ms of missed frames before resetting
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -24,38 +20,45 @@ export class DrowsinessDetector {
   constructor(onDrowsy) {
     this.onDrowsy = onDrowsy;
     this.eyeClosedSince = null;
+    this.lastDetectedAt = null;
     this.blinkTimestamps = [];
     this.alertActive = false;
-    // Calibration
     this.calibrating = true;
     this.calibrationStart = Date.now();
     this.calibrationSamples = [];
-    this.threshold = null; // set after calibration
+    this.threshold = null;
   }
 
-  // positions: array of 68 {x,y} points from face-api.js
   processKeypoints(positions) {
+    const now = Date.now();
+
     if (!positions || positions.length < 68) {
-      this._reset();
+      // Only reset closed-eye timer if face has been missing too long
+      if (this.eyeClosedSince && this.lastDetectedAt &&
+          now - this.lastDetectedAt > MAX_MISS_MS) {
+        this.eyeClosedSince = null;
+      }
       return null;
     }
 
+    this.lastDetectedAt = now;
+
     const ear = (eyeAspectRatio(positions, LEFT_EYE) + eyeAspectRatio(positions, RIGHT_EYE)) / 2;
 
-    // Calibration phase — collect open-eye EAR samples
+    // Calibration phase
     if (this.calibrating) {
       this.calibrationSamples.push(ear);
-      const elapsed = Date.now() - this.calibrationStart;
+      const elapsed = now - this.calibrationStart;
       if (elapsed >= CALIBRATION_MS) {
         const avg = this.calibrationSamples.reduce((a, b) => a + b, 0) / this.calibrationSamples.length;
         this.threshold = avg * CLOSED_RATIO;
         this.calibrating = false;
+        console.log(`[Calibration] baseline=${avg.toFixed(3)} threshold=${this.threshold.toFixed(3)}`);
       }
-      return { ear, calibrating: true, progress: Math.min((Date.now() - this.calibrationStart) / CALIBRATION_MS, 1) };
+      return { ear, calibrating: true, progress: Math.min(elapsed / CALIBRATION_MS, 1) };
     }
 
     const eyesClosed = ear < this.threshold;
-    const now = Date.now();
 
     if (eyesClosed) {
       if (!this.eyeClosedSince) {
@@ -85,11 +88,6 @@ export class DrowsinessDetector {
       }
     }
 
-    return ear;
-  }
-
-  _reset() {
-    this.eyeClosedSince = null;
-    this.alertActive = false;
+    return { ear, threshold: this.threshold, eyesClosed };
   }
 }
