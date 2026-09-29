@@ -77,16 +77,19 @@ export default function App() {
     };
   }, [handleDrowsy]);
 
-  // Start/stop web camera when simMode changes on web
+  // Start/stop web camera based on simMode
   useEffect(() => {
     if (!IS_WEB || !modelReady) return;
 
-    if (!simModeRef.current) {
-      // Start web camera
+    if (!simMode) {
+      // Wait a tick for the video element to be mounted in the DOM
       const { requestWebCamera } = require("./src/webCamera");
-      requestWebCamera(videoRef.current)
-        .then((stream) => { streamRef.current = stream; setWebCamError(null); })
-        .catch(() => setWebCamError("Camera access denied. Enable camera permission in your browser."));
+      setTimeout(() => {
+        if (!videoRef.current) return;
+        requestWebCamera(videoRef.current)
+          .then((stream) => { streamRef.current = stream; setWebCamError(null); })
+          .catch(() => setWebCamError("Camera access denied. Enable camera permission in your browser."));
+      }, 100);
     } else {
       // Stop web camera when switching to sim
       if (streamRef.current) {
