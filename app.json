@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "StayAwake",
+    "slug": "stayawake",
+    "version": "1.0.0",
+    "sdkVersion": "57.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#1a1a2e"
+    },
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "Camera is used to monitor driver's eyes for drowsiness detection.",
+        "NSMicrophoneUsageDescription": "Microphone access is required by the camera."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA", "VIBRATE", "WAKE_LOCK"],
+      "package": "com.stayawake.app"
+    },
+    "plugins": [
+      ["expo-camera", {
+        "cameraPermission": "Camera is used to detect driver drowsiness.",
+        "microphonePermission": false
+      }]
+    ]
+  }
+}
