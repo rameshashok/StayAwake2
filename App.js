@@ -28,20 +28,24 @@ const SIM_STATES = {
 };
 
 export default function App() {
-  const [modelReady, setModelReady]   = useState(false);
-  const [status, setStatus]           = useState("monitoring");
-  const [reason, setReason]           = useState("");
-  const [ear, setEar]                 = useState(null);
-  const [simMode, setSimMode]         = useState(IS_WEB); // ON by default on web
-  const [simState, setSimState]       = useState("open");
-  const [permission, setPermission]   = useState(null);   // native only
+  const [modelReady, setModelReady] = useState(false);
+  const [status, setStatus]         = useState("monitoring");
+  const [reason, setReason]         = useState("");
+  const [ear, setEar]               = useState(null);
+  const [simMode, setSimMode]       = useState(false);
+  const [simState, setSimState]     = useState("open");
+  const [permission, setPermission] = useState(null);
+  const [webCamError, setWebCamError] = useState(null);
 
-  const cameraRef    = useRef(null);
-  const detectorRef  = useRef(null);
-  const loopRef      = useRef(null);
-  const runningRef   = useRef(false);
-  const simStateRef  = useRef("open");
-  const simModeRef   = useRef(IS_WEB);
+  const cameraRef   = useRef(null);  // native CameraView ref
+  const videoRef    = useRef(null);  // web <video> element ref
+  const canvasRef   = useRef(null);  // web <canvas> element ref
+  const streamRef   = useRef(null);  // web MediaStream ref
+  const detectorRef = useRef(null);
+  const loopRef     = useRef(null);
+  const runningRef  = useRef(false);
+  const simStateRef = useRef("open");
+  const simModeRef  = useRef(false);
 
   const handleDrowsy = useCallback(async (cause) => {
     setStatus("drowsy");
@@ -49,31 +53,48 @@ export default function App() {
     await alertService.start();
   }, []);
 
-  // Load model + request camera permission
+  // Load model on mount
   useEffect(() => {
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
 
-    if (!IS_WEB) {
-      // Dynamically import native-only modules
-      Promise.all([
-        import("./src/mlModel").then((m) => m.loadModel()),
-        import("expo-camera").then((m) => m.useCameraPermissions),
-      ]).then(() => setModelReady(true));
+    const { loadModel } = require("./src/mlModel");
+    loadModel().then(() => setModelReady(true));
 
+    if (!IS_WEB) {
       import("expo-camera").then(({ Camera }) => {
         Camera.requestCameraPermissionsAsync().then(({ granted }) =>
           setPermission(granted)
         );
       });
-    } else {
-      setModelReady(true);
     }
 
     return () => {
       runningRef.current = false;
       alertService.stop();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
     };
   }, [handleDrowsy]);
+
+  // Start/stop web camera when simMode changes on web
+  useEffect(() => {
+    if (!IS_WEB || !modelReady) return;
+
+    if (!simModeRef.current) {
+      // Start web camera
+      const { requestWebCamera } = require("./src/webCamera");
+      requestWebCamera(videoRef.current)
+        .then((stream) => { streamRef.current = stream; setWebCamError(null); })
+        .catch(() => setWebCamError("Camera access denied. Enable camera permission in your browser."));
+    } else {
+      // Stop web camera when switching to sim
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+    }
+  }, [simMode, modelReady]);
 
   // Main detection loop
   useEffect(() => {
@@ -85,13 +106,27 @@ export default function App() {
 
       if (status !== "drowsy") {
         if (simModeRef.current) {
-          // --- Simulation path ---
+          // Simulation path
           const { ear: earVal } = SIM_STATES[simStateRef.current];
           const pts = makeFakeKeypoints(earVal);
           const result = detectorRef.current?.processKeypoints(pts);
           if (result != null) setEar(result.toFixed(2));
-        } else if (!IS_WEB && cameraRef.current && permission) {
-          // --- Real camera + ML path ---
+
+        } else if (IS_WEB) {
+          // Web live camera path
+          try {
+            const { captureFrame } = require("./src/webCamera");
+            const canvas = captureFrame(videoRef.current, canvasRef.current);
+            if (canvas) {
+              const { detectLandmarks } = require("./src/mlModel");
+              const keypoints = await detectLandmarks(canvas);
+              const result = detectorRef.current?.processKeypoints(keypoints);
+              if (result != null) setEar(result.toFixed(2));
+            }
+          } catch (_) { /* skip frame */ }
+
+        } else if (cameraRef.current && permission) {
+          // Native live camera path
           try {
             const photo = await cameraRef.current.takePictureAsync({
               base64: false, quality: 0.2, skipProcessing: true, exif: false,
@@ -122,14 +157,8 @@ export default function App() {
     const next = !simModeRef.current;
     simModeRef.current = next;
     setSimMode(next);
-    // Reset detector when switching modes
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
     setEar(null);
-  };
-
-  const changeSimState = (key) => {
-    simStateRef.current = key;
-    setSimState(key);
   };
 
   const dismissAlert = async () => {
@@ -141,15 +170,27 @@ export default function App() {
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
   };
 
-  // Lazy-loaded CameraView for native
   const CameraView = IS_WEB ? null : require("expo-camera").CameraView;
 
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* Camera feed or sim placeholder */}
-      {!IS_WEB && !simMode && CameraView ? (
+      {/* Camera feed */}
+      {IS_WEB ? (
+        <View style={styles.camera}>
+          {/* Hidden video + canvas for ML frame capture */}
+          <video
+            ref={videoRef}
+            style={{ position: "absolute", width: "100%", height: "100%", objectFit: "cover",
+              transform: "scaleX(-1)", display: simMode ? "none" : "block" }}
+            muted playsInline
+          />
+          <canvas ref={canvasRef} style={{ display: "none" }} />
+          {simMode && <Text style={styles.simLabel}>[ Simulation Mode ]</Text>}
+          {!simMode && webCamError && <Text style={styles.errorLabel}>{webCamError}</Text>}
+        </View>
+      ) : !simMode && CameraView ? (
         <CameraView style={styles.camera} facing="front" ref={cameraRef} />
       ) : (
         <View style={styles.camera}>
@@ -160,9 +201,8 @@ export default function App() {
       <View style={styles.overlay}>
         <View style={styles.header}>
           <Text style={styles.title}>StayAwake</Text>
-          {/* Sim toggle — always visible */}
           <TouchableOpacity style={[styles.toggleBtn, simMode && styles.toggleActive]} onPress={toggleSimMode}>
-            <Text style={styles.toggleText}>{simMode ? "🧪 Sim ON" : "📷 Live"}</Text>
+            <Text style={styles.toggleText}>{simMode ? "🧪 Sim" : "📷 Live"}</Text>
           </TouchableOpacity>
         </View>
 
@@ -198,7 +238,7 @@ export default function App() {
                     <TouchableOpacity
                       key={key}
                       style={[styles.simBtn, simState === key && { backgroundColor: val.color }]}
-                      onPress={() => changeSimState(key)}
+                      onPress={() => { simStateRef.current = key; setSimState(key); }}
                     >
                       <Text style={styles.simBtnText}>{val.label}</Text>
                     </TouchableOpacity>
@@ -216,8 +256,9 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: "#1a1a2e" },
-  camera:       { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#0d0d1a" },
+  camera:       { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000", overflow: "hidden" },
   simLabel:     { color: "#333", fontSize: 14 },
+  errorLabel:   { color: "#e53935", fontSize: 13, textAlign: "center", padding: 20 },
   overlay:      { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "space-between", padding: 40 },
   header:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20 },
   title:        { color: "#fff", fontSize: 28, fontWeight: "bold" },
