@@ -31,18 +31,15 @@ export default function App() {
   const [modelReady, setModelReady] = useState(false);
   const [status, setStatus]         = useState("monitoring");
   const [reason, setReason]         = useState("");
-  const [ear, setEar]               = useState(null);
   const [simMode, setSimMode]       = useState(false);
   const [simState, setSimState]     = useState("open");
   const [permission, setPermission] = useState(null);
   const [webCamError, setWebCamError] = useState(null);
-  const [debugMsg, setDebugMsg] = useState("");
-  const [calibProgress, setCalibProgress] = useState(0); // 0-1
+  const [calibProgress, setCalibProgress] = useState(0);
 
-  const cameraRef   = useRef(null);  // native CameraView ref
-  const videoRef    = useRef(null);  // web <video> element ref
-  const canvasRef   = useRef(null);  // web <canvas> element ref
-  const streamRef   = useRef(null);  // web MediaStream ref
+  const cameraRef   = useRef(null);
+  const videoRef    = useRef(null);
+  const streamRef   = useRef(null);
   const detectorRef = useRef(null);
   const loopRef     = useRef(null);
   const runningRef  = useRef(false);
@@ -114,34 +111,28 @@ export default function App() {
           // Simulation path
           const { ear: earVal } = SIM_STATES[simStateRef.current];
           const pts = makeFakeKeypoints(earVal);
-          const result = detectorRef.current?.processKeypoints(pts);
-          if (result != null) setEar(result.toFixed(2));
+          detectorRef.current?.processKeypoints(pts);
 
         } else if (IS_WEB) {
           try {
             if (videoRef.current && videoRef.current.readyState >= 2) {
               const { detectLandmarks } = require("./src/mlModel");
               const keypoints = await detectLandmarks(videoRef.current);
-              if (!keypoints) {
-                setDebugMsg("No face detected");
-              } else {
-                setDebugMsg("");
+              if (keypoints) {
                 const result = detectorRef.current?.processKeypoints(keypoints);
                 if (result != null) {
                   if (result?.calibrating) {
                     setCalibProgress(result.progress);
-                    setEar(result.ear.toFixed(2));
                   } else {
                     setCalibProgress(1);
-                    setEar(result.ear.toFixed(2));
-                    setDebugMsg(`EAR:${result.ear.toFixed(2)} thr:${result.threshold?.toFixed(2)} ${result.eyesClosed ? "CLOSED" : "open"}`);
+                    console.log(`EAR:${result.ear.toFixed(3)} thr:${result.threshold?.toFixed(3)} ${result.eyesClosed ? "CLOSED" : "open"}`);
                   }
                 }
+              } else {
+                console.log("no face");
               }
-            } else {
-              setDebugMsg("Video not ready");
             }
-          } catch (e) { setDebugMsg("Error: " + e.message); }
+          } catch (_) { /* skip frame */ }
 
         } else if (!IS_WEB && cameraRef.current && permission) {
           try {
@@ -215,7 +206,6 @@ export default function App() {
           />
           {simMode && <Text style={styles.simLabel}>[ Simulation Mode ]</Text>}
           {!simMode && webCamError && <Text style={styles.errorLabel}>{webCamError}</Text>}
-          {!simMode && debugMsg ? <Text style={styles.debugLabel}>{debugMsg}</Text> : null}
         </View>
       ) : !simMode && CameraView ? (
         <CameraView style={styles.camera} facing="front" ref={cameraRef} />
@@ -260,7 +250,6 @@ export default function App() {
               <View style={[styles.dot, { backgroundColor: simMode ? SIM_STATES[simState].color : "#00e676" }]} />
               <Text style={styles.statusText}>
                 {simMode ? SIM_STATES[simState].label : "Monitoring..."}
-                {ear != null ? `   EAR: ${ear}` : ""}
               </Text>
             </View>
 
@@ -293,7 +282,6 @@ const styles = StyleSheet.create({
   camera:       { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#000", overflow: "hidden" },
   simLabel:     { color: "#333", fontSize: 14 },
   errorLabel:   { color: "#e53935", fontSize: 13, textAlign: "center", padding: 20 },
-  debugLabel:   { color: "#ffb300", fontSize: 12, textAlign: "center", padding: 4, backgroundColor: "rgba(0,0,0,0.5)" },
   overlay:      { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "space-between", padding: 40 },
   header:       { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20 },
   title:        { color: "#fff", fontSize: 28, fontWeight: "bold" },

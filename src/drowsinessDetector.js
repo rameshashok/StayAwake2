@@ -4,8 +4,9 @@ const RIGHT_EYE = [42, 43, 44, 45, 46, 47];
 const DROWSY_MS        = 2000;
 const MIN_BLINKS_MIN   = 8;
 const CALIBRATION_MS   = 3000;
-const CLOSED_RATIO     = 0.75; // more aggressive: 75% of baseline
-const MAX_MISS_MS      = 500;  // tolerate up to 500ms of missed frames before resetting
+const CLOSED_RATIO     = 0.85;
+const MAX_MISS_MS      = 2500;  // keep timer alive through face-loss bursts
+const OPEN_CONFIRM_MS  = 400;   // eyes must be open for 400ms before resetting timer
 
 function dist(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -27,13 +28,21 @@ export class DrowsinessDetector {
     this.calibrationStart = Date.now();
     this.calibrationSamples = [];
     this.threshold = null;
+    this.eyesOpenSince = null;
   }
 
   processKeypoints(positions) {
     const now = Date.now();
 
     if (!positions || positions.length < 68) {
-      // Only reset closed-eye timer if face has been missing too long
+      this.eyesOpenSince = null;
+      if (this.eyeClosedSince && !this.alertActive) {
+        if (now - this.eyeClosedSince >= DROWSY_MS) {
+          this.alertActive = true;
+          this.onDrowsy("eyes_closed");
+        }
+        return null;
+      }
       if (this.eyeClosedSince && this.lastDetectedAt &&
           now - this.lastDetectedAt > MAX_MISS_MS) {
         this.eyeClosedSince = null;
@@ -53,7 +62,6 @@ export class DrowsinessDetector {
         const avg = this.calibrationSamples.reduce((a, b) => a + b, 0) / this.calibrationSamples.length;
         this.threshold = avg * CLOSED_RATIO;
         this.calibrating = false;
-        console.log(`[Calibration] baseline=${avg.toFixed(3)} threshold=${this.threshold.toFixed(3)}`);
       }
       return { ear, calibrating: true, progress: Math.min(elapsed / CALIBRATION_MS, 1) };
     }
@@ -61,6 +69,7 @@ export class DrowsinessDetector {
     const eyesClosed = ear < this.threshold;
 
     if (eyesClosed) {
+      this.eyesOpenSince = null;
       if (!this.eyeClosedSince) {
         this.eyeClosedSince = now;
       } else if (now - this.eyeClosedSince >= DROWSY_MS && !this.alertActive) {
@@ -68,7 +77,9 @@ export class DrowsinessDetector {
         this.onDrowsy("eyes_closed");
       }
     } else {
-      if (this.eyeClosedSince) {
+      if (!this.eyesOpenSince) this.eyesOpenSince = now;
+      const confirmedOpen = now - this.eyesOpenSince >= OPEN_CONFIRM_MS;
+      if (this.eyeClosedSince && confirmedOpen) {
         this.blinkTimestamps.push(now);
         this.eyeClosedSince = null;
         this.alertActive = false;
