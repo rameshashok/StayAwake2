@@ -10,8 +10,6 @@
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@expo/ngrok": "^4.1.0",
-    "@tensorflow/tfjs": "4.17.0",
-    "@tensorflow/tfjs-backend-cpu": "4.17.0",
     "expo": "~57.0.0",
     "expo-av": "~15.0.0",
     "expo-camera": "~16.0.0",

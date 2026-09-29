@@ -1,5 +1,3 @@
-import * as tf from "@tensorflow/tfjs";
-import "@tensorflow/tfjs-backend-cpu";
 import * as faceapi from "face-api.js";
 
 let ready = false;
@@ -7,8 +5,6 @@ let ready = false;
 const MODEL_URL = "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights";
 
 export async function loadModel() {
-  await tf.setBackend("cpu");
-  await tf.ready();
   await Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
     faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
@@ -16,7 +12,7 @@ export async function loadModel() {
   ready = true;
 }
 
-// On web: pass an HTMLVideoElement — face-api.js handles it natively, no TF tensor needed
+// On web: pass an HTMLVideoElement — face-api.js handles it natively
 // On native: pass { data: Uint8Array (RGBA), width, height }
 export async function detectLandmarks(input) {
   if (!ready) return null;
@@ -25,10 +21,10 @@ export async function detectLandmarks(input) {
   let isTensor = false;
 
   if (typeof HTMLVideoElement !== "undefined" && input instanceof HTMLVideoElement) {
-    // Web path — pass video element directly, face-api handles it without TF ops
     source = input;
   } else {
-    // Native path — convert RGBA bytes to RGB tensor
+    // Native path — convert RGBA bytes to RGB tensor using face-api's bundled tf
+    const tf = faceapi.tf;
     const { data, width, height } = input;
     const rgbData = new Uint8Array(width * height * 3);
     for (let i = 0, j = 0; i < data.length; i += 4, j += 3) {
