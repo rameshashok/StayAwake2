@@ -1,5 +1,10 @@
-const LEFT_EYE  = [36, 37, 38, 39, 40, 41];
-const RIGHT_EYE = [42, 43, 44, 45, 46, 47];
+// MediaPipe FaceMesh 478-landmark eye indices (web)
+const MP_LEFT_EYE  = [362, 385, 387, 263, 373, 380];
+const MP_RIGHT_EYE = [33,  160, 158, 133, 153, 144];
+
+// face-api.js 68-landmark eye indices (native)
+const FA_LEFT_EYE  = [36, 37, 38, 39, 40, 41];
+const FA_RIGHT_EYE = [42, 43, 44, 45, 46, 47];
 
 const DROWSY_MS        = 2000;
 const MIN_BLINKS_MIN   = 8;
@@ -51,6 +56,10 @@ export class DrowsinessDetector {
     }
 
     this.lastDetectedAt = now;
+
+    const isMediaPipe = positions.length > 68;
+    const LEFT_EYE  = isMediaPipe ? MP_LEFT_EYE  : FA_LEFT_EYE;
+    const RIGHT_EYE = isMediaPipe ? MP_RIGHT_EYE : FA_RIGHT_EYE;
 
     const ear = (eyeAspectRatio(positions, LEFT_EYE) + eyeAspectRatio(positions, RIGHT_EYE)) / 2;
 
