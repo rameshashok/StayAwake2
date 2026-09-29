@@ -1,5 +1,5 @@
 import { Audio } from "expo-av";
-import * as Haptics from "expo-haptics";
+import { Platform } from "react-native";
 
 export class AlertService {
   constructor() {
@@ -8,9 +8,12 @@ export class AlertService {
   }
 
   async start() {
-    this.vibrationInterval = setInterval(() => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }, 400);
+    if (Platform.OS !== "web") {
+      const Haptics = require("expo-haptics");
+      this.vibrationInterval = setInterval(() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }, 400);
+    }
 
     try {
       const { sound } = await Audio.Sound.createAsync(
