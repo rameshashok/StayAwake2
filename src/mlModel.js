@@ -9,7 +9,11 @@ let faceapi = null;         // face-api.js (native)
 const FACEAPI_MODEL_URL =
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights";
 const MEDIAPIPE_WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm";
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MEDIAPIPE_BUNDLE_URL =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js";
+const MEDIAPIPE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -24,13 +28,12 @@ function loadScript(src) {
 
 export async function loadModel() {
   if (IS_WEB) {
-    await loadScript("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.js");
+    await loadScript(MEDIAPIPE_BUNDLE_URL);
     const { FaceLandmarker, FilesetResolver } = window.Vision;
     const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        modelAssetPath: MEDIAPIPE_MODEL_URL,
         delegate: "CPU",
       },
       runningMode: "VIDEO",

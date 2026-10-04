@@ -10,9 +10,12 @@
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@expo/ngrok": "^4.1.0",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@sentry/react-native": "~7.11.0",
     "expo": "~57.0.0",
     "expo-av": "~15.0.0",
     "expo-camera": "~16.0.0",
+    "expo-dev-client": "~57.0.19",
     "expo-haptics": "~14.0.0",
     "expo-status-bar": "~2.2.0",
     "face-api.js": "0.22.2",
@@ -24,6 +27,11 @@
     "tslib": "^2.6.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "canvas": "^3.2.3",
+    "jimp": "^1.6.1"
+  },
+  "allowScripts": {
+    "canvas@3.2.3": true
   }
 }

@@ -19,7 +19,9 @@ function dist(a, b) {
 
 function eyeAspectRatio(pts, idx) {
   const [p1, p2, p3, p4, p5, p6] = idx.map((i) => pts[i]);
-  return (dist(p2, p6) + dist(p3, p5)) / (2 * dist(p1, p4));
+  const denom = 2 * dist(p1, p4);
+  if (denom === 0) return 0;
+  return (dist(p2, p6) + dist(p3, p5)) / denom;
 }
 
 export class DrowsinessDetector {
@@ -68,7 +70,14 @@ export class DrowsinessDetector {
       this.calibrationSamples.push(ear);
       const elapsed = now - this.calibrationStart;
       if (elapsed >= CALIBRATION_MS) {
-        const avg = this.calibrationSamples.reduce((a, b) => a + b, 0) / this.calibrationSamples.length;
+        const validSamples = this.calibrationSamples.filter((s) => s > 0);
+        if (validSamples.length === 0) {
+          // No valid samples — restart calibration
+          this.calibrationStart = Date.now();
+          this.calibrationSamples = [];
+          return { ear, calibrating: true, progress: 0 };
+        }
+        const avg = validSamples.reduce((a, b) => a + b, 0) / validSamples.length;
         this.threshold = avg * CLOSED_RATIO;
         this.calibrating = false;
       }

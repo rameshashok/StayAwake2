@@ -1,8 +1,12 @@
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Platform } from "react-native";
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, Platform, Modal, ScrollView, Linking } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { DrowsinessDetector } from "./src/drowsinessDetector";
 import { AlertService } from "./src/AlertService";
+import { initErrorReporting, captureError } from "./src/errorReporting";
+import { logEvent } from "./src/analytics";
+
+initErrorReporting();
 
 const IS_WEB = Platform.OS === "web";
 const alertService = new AlertService();
@@ -36,6 +40,8 @@ export default function App() {
   const [permission, setPermission] = useState(null);
   const [webCamError, setWebCamError] = useState(null);
   const [calibProgress, setCalibProgress] = useState(0);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [modelError, setModelError] = useState(null);
 
   const cameraRef   = useRef(null);
   const videoRef    = useRef(null);
@@ -45,19 +51,46 @@ export default function App() {
   const runningRef  = useRef(false);
   const simStateRef = useRef("open");
   const simModeRef  = useRef(false);
+  const statusRef   = useRef("monitoring");
 
   const handleDrowsy = useCallback(async (cause) => {
+    statusRef.current = "drowsy";
     setStatus("drowsy");
-    setReason(cause === "eyes_closed" ? "Eyes closed too long!" : "Low blink rate detected!");
+    setReason(cause === "eyes_closed" ? "Your eyes have been closed for a while." : "Reduced blink activity detected.");
+    logEvent("alert_triggered", { cause });
     await alertService.start();
   }, []);
+
+  // Show disclaimer on first launch
+  useEffect(() => {
+    logEvent("app_open");
+    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    AsyncStorage.getItem("disclaimer_accepted").then((val) => {
+      if (!val) setShowDisclaimer(true);
+    });
+  }, []);
+
+  const acceptDisclaimer = () => {
+    const AsyncStorage = require("@react-native-async-storage/async-storage").default;
+    AsyncStorage.setItem("disclaimer_accepted", "1");
+    logEvent("disclaimer_accepted");
+    setShowDisclaimer(false);
+  };
 
   // Load model on mount
   useEffect(() => {
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
 
     const { loadModel } = require("./src/mlModel");
-    loadModel().then(() => setModelReady(true));
+    loadModel()
+      .then(() => {
+        setModelReady(true);
+        logEvent("model_loaded");
+      })
+      .catch((err) => {
+        captureError(err, { context: "loadModel" });
+        setModelError("Failed to load detection model. Check your connection and restart.");
+      });
 
     if (!IS_WEB) {
       import("expo-camera").then(({ Camera }) => {
@@ -106,7 +139,7 @@ export default function App() {
     const loop = async () => {
       if (!runningRef.current) return;
 
-      if (status !== "drowsy") {
+      if (statusRef.current !== "drowsy") {
         if (simModeRef.current) {
           // Simulation path
           const { ear: earVal } = SIM_STATES[simStateRef.current];
@@ -125,11 +158,8 @@ export default function App() {
                     setCalibProgress(result.progress);
                   } else {
                     setCalibProgress(1);
-                    console.log(`EAR:${result.ear.toFixed(3)} thr:${result.threshold?.toFixed(3)} ${result.eyesClosed ? "CLOSED" : "open"}`);
                   }
                 }
-              } else {
-                console.log("no face");
               }
             }
           } catch (_) { /* skip frame */ }
@@ -147,13 +177,7 @@ export default function App() {
             const keypoints = await detectLandmarks({ data, width, height });
             const result = detectorRef.current?.processKeypoints(keypoints);
             if (result != null) {
-              if (result?.calibrating) {
-                setCalibProgress(result.progress);
-                setEar(result.ear.toFixed(2));
-              } else {
-                setCalibProgress(1);
-                setEar(result.ear.toFixed(2));
-              }
+              setCalibProgress(result.calibrating ? result.progress : 1);
             }
           } catch (_) { /* skip frame */ }
         }
@@ -175,13 +199,14 @@ export default function App() {
     setSimMode(next);
     setCalibProgress(next ? 1 : 0);
     detectorRef.current = new DrowsinessDetector(handleDrowsy);
-    setEar(null);
   };
 
   const dismissAlert = async () => {
     await alertService.stop();
+    logEvent("alert_dismissed");
     setStatus("monitoring");
     setReason("");
+    statusRef.current = "monitoring";
     setCalibProgress(0);
     simStateRef.current = "open";
     setSimState("open");
@@ -207,8 +232,12 @@ export default function App() {
           {simMode && <Text style={styles.simLabel}>[ Simulation Mode ]</Text>}
           {!simMode && webCamError && <Text style={styles.errorLabel}>{webCamError}</Text>}
         </View>
-      ) : !simMode && CameraView ? (
+      ) : !simMode && CameraView && permission ? (
         <CameraView style={styles.camera} facing="front" ref={cameraRef} />
+      ) : !simMode && permission === false ? (
+        <View style={styles.camera}>
+          <Text style={styles.errorLabel}>{"Camera permission denied.\nEnable it in Settings to use live detection."}</Text>
+        </View>
       ) : (
         <View style={styles.camera}>
           <Text style={styles.simLabel}>[ Simulation Mode ]</Text>
@@ -223,7 +252,11 @@ export default function App() {
           </TouchableOpacity>
         </View>
 
-        {!modelReady ? (
+        {modelError ? (
+          <View style={styles.statusBox}>
+            <Text style={styles.errorLabel}>{modelError}</Text>
+          </View>
+        ) : !modelReady ? (
           <View style={styles.statusBox}>
             <ActivityIndicator color="#fff" style={{ marginRight: 10 }} />
             <Text style={styles.statusText}>Loading ML model...</Text>
@@ -238,8 +271,9 @@ export default function App() {
         ) : status === "drowsy" ? (
           <View style={styles.alertBox}>
             <Text style={styles.alertIcon}>⚠️</Text>
-            <Text style={styles.alertText}>DROWSINESS DETECTED</Text>
+            <Text style={styles.alertText}>Stay Alert</Text>
             <Text style={styles.alertReason}>{reason}</Text>
+            <Text style={styles.alertDisclaimer}>Consider taking a break if you feel tired.</Text>
             <TouchableOpacity style={styles.dismissBtn} onPress={dismissAlert}>
               <Text style={styles.btnText}>I'm Awake</Text>
             </TouchableOpacity>
@@ -272,7 +306,32 @@ export default function App() {
             )}
           </>
         )}
+        <Text style={styles.footerDisclaimer}>
+          Supplemental aid only — not a substitute for safe driving practices.
+        </Text>
       </View>
+
+      <Modal visible={showDisclaimer} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>⚠️ Important Disclaimer</Text>
+            <ScrollView style={{ maxHeight: 260 }}>
+              <Text style={styles.modalBody}>
+                StayAwake is a <Text style={styles.bold}>supplemental driver assistance tool</Text> only.{"\n\n"}
+                It is <Text style={styles.bold}>not</Text> a substitute for attentive, safe driving. It may not detect all instances of drowsiness and should never be relied upon as your sole means of staying alert.{"\n\n"}
+                If you feel tired, <Text style={styles.bold}>pull over and rest</Text>. No app can replace good judgment.{"\n\n"}
+                By continuing, you acknowledge that you use this app at your own risk and that the developers are not liable for any incidents while driving.
+              </Text>
+            </ScrollView>
+            <TouchableOpacity style={styles.modalBtn} onPress={acceptDisclaimer}>
+              <Text style={styles.modalBtnText}>I Understand — Continue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => Linking.openURL("https://github.com/rameshashok/stayawake/blob/main/PRIVACY_POLICY.md")}>
+              <Text style={styles.privacyLink}>View Privacy Policy</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -306,5 +365,15 @@ const styles = StyleSheet.create({
   simBtn:       { backgroundColor: "#2a2a4a", paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: "#444" },
   simBtnText:   { color: "#fff", fontSize: 13 },
   simHint:      { color: "#666", fontSize: 12, textAlign: "center" },
-  btnText:      { color: "#1a1a2e", fontWeight: "bold", fontSize: 16 },
+  btnText:          { color: "#1a1a2e", fontWeight: "bold", fontSize: 16 },
+  alertDisclaimer:  { color: "rgba(255,255,200,0.7)", fontSize: 12, marginBottom: 16, textAlign: "center" },
+  footerDisclaimer: { color: "rgba(255,255,255,0.3)", fontSize: 11, textAlign: "center", paddingBottom: 8 },
+  modalOverlay:     { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center", padding: 24 },
+  modalBox:         { backgroundColor: "#1e1e3a", borderRadius: 16, padding: 24, width: "100%", maxWidth: 420 },
+  modalTitle:       { color: "#fff", fontSize: 18, fontWeight: "bold", marginBottom: 16, textAlign: "center" },
+  modalBody:        { color: "#ccc", fontSize: 14, lineHeight: 22 },
+  bold:             { fontWeight: "bold", color: "#fff" },
+  modalBtn:         { backgroundColor: "#4f46e5", borderRadius: 30, paddingVertical: 14, alignItems: "center", marginTop: 20 },
+  modalBtnText:     { color: "#fff", fontWeight: "bold", fontSize: 15 },
+  privacyLink:      { color: "#a78bfa", fontSize: 13, textAlign: "center", marginTop: 14, textDecorationLine: "underline" },
 });

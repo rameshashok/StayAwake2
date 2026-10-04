@@ -2,6 +2,13 @@ import { Platform } from "react-native";
 
 const IS_WEB = Platform.OS === "web";
 
+let Haptics = null;
+let Audio = null;
+if (!IS_WEB) {
+  Haptics = require("expo-haptics");
+  Audio = require("expo-av").Audio;
+}
+
 export class AlertService {
   constructor() {
     this.sound = null;
@@ -36,13 +43,12 @@ export class AlertService {
       return;
     }
 
-    const Haptics = require("expo-haptics");
+    if (!Haptics) return;
     this.vibrationInterval = setInterval(() => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }, 400);
 
     try {
-      const { Audio } = require("expo-av");
       const { sound } = await Audio.Sound.createAsync(
         require("../assets/alert.mp3"),
         { shouldPlay: true, isLooping: true, volume: 1.0 }
