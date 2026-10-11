@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react-native";
+import Constants from "expo-constants";
 
-const DSN = process.env.SENTRY_DSN || "";
+const DSN = Constants.expoConfig?.extra?.sentryDsn ?? "";
 
 export function initErrorReporting() {
   if (!DSN) return;

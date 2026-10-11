@@ -5,9 +5,25 @@
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
-    "ios": "expo start --ios"
+    "ios": "expo start --ios",
+    "build:web": "expo export --platform web",
+    "test": "jest"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {
+      "^.+\\.js$": "babel-jest"
+    },
+    "moduleNameMapper": {
+      "@react-native-async-storage/async-storage": "<rootDir>/__mocks__/async-storage.js",
+      "react-native": "<rootDir>/__mocks__/react-native.js"
+    },
+    "testMatch": [
+      "**/__tests__/**/*.test.js"
+    ]
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@expo/metro-runtime": "~57.0.16",
     "@expo/ngrok": "^4.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -16,7 +32,9 @@
     "expo-av": "~15.0.0",
     "expo-camera": "~16.0.0",
     "expo-dev-client": "~57.0.19",
+    "expo-font": "~57.0.4",
     "expo-haptics": "~14.0.0",
+    "expo-keep-awake": "~57.0.2",
     "expo-status-bar": "~2.2.0",
     "face-api.js": "0.22.2",
     "jpeg-js": "0.4.4",
@@ -28,7 +46,10 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.29.7",
+    "babel-jest": "^30.5.2",
     "canvas": "^3.2.3",
+    "jest": "^30.5.2",
     "jimp": "^1.6.1"
   },
   "allowScripts": {
