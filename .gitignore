@@ -13,3 +13,4 @@ coverage/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.vercel

@@ -10,17 +10,19 @@ const FACEAPI_MODEL_URL =
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights";
 const MEDIAPIPE_WASM_URL =
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-const MEDIAPIPE_BUNDLE_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js";
 const MEDIAPIPE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
-function loadScript(src) {
+async function loadMediaPipe() {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
     const s = document.createElement("script");
-    s.src = src;
-    s.onload = resolve;
+    s.type = "module";
+    s.textContent = [
+      `import * as mp from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";`,
+      `window.__mediapipe = mp;`,
+      `window.dispatchEvent(new Event("mediapipe-ready"));`,
+    ].join("\n");
+    window.addEventListener("mediapipe-ready", () => resolve(window.__mediapipe), { once: true });
     s.onerror = reject;
     document.head.appendChild(s);
   });
@@ -28,8 +30,7 @@ function loadScript(src) {
 
 export async function loadModel() {
   if (IS_WEB) {
-    await loadScript(MEDIAPIPE_BUNDLE_URL);
-    const { FaceLandmarker, FilesetResolver } = window.Vision;
+    const { FaceLandmarker, FilesetResolver } = await loadMediaPipe();
     const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_URL);
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
