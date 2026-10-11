@@ -79,7 +79,25 @@ export function useDetectionLoop() {
         setModelError("Failed to load detection model. Check your connection and restart.");
       });
 
-    if (!IS_WEB) {
+    if (IS_WEB) {
+      // Request camera immediately so browser shows the permission prompt right away
+      navigator.mediaDevices?.getUserMedia({ video: { facingMode: "user" }, audio: false })
+        .then((stream) => {
+          streamRef.current = stream;
+          setWebCamError(null);
+          // Attach to video element once it's mounted
+          const attach = () => {
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream;
+              videoRef.current.play().catch(() => {});
+            } else {
+              setTimeout(attach, 100);
+            }
+          };
+          attach();
+        })
+        .catch(() => setWebCamError("Camera access denied. Enable camera permission in your browser."));
+    } else {
       import("expo-camera").then(({ Camera }) =>
         Camera.requestCameraPermissionsAsync().then(({ granted }) => setPermission(granted))
       );
@@ -92,17 +110,15 @@ export function useDetectionLoop() {
     };
   }, [handleDrowsy]);
 
-  // Web camera start/stop
+  // Web camera start/stop (sim mode toggle)
   useEffect(() => {
     if (!IS_WEB || !modelReady) return;
     if (!simMode) {
-      const { requestWebCamera } = require("../webCamera");
-      setTimeout(() => {
-        if (!videoRef.current) return;
-        requestWebCamera(videoRef.current)
-          .then((stream) => { streamRef.current = stream; setWebCamError(null); })
-          .catch(() => setWebCamError("Camera access denied. Enable camera permission in your browser."));
-      }, 100);
+      // Stream may already be running from the early request — just reattach
+      if (streamRef.current && videoRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+        videoRef.current.play().catch(() => {});
+      }
     } else {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;

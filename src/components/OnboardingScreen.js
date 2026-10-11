@@ -1,7 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from "react-native";
-
-const { width } = Dimensions.get("window");
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
 
 const SLIDES = [
   {
@@ -28,11 +26,12 @@ const SLIDES = [
 
 export function OnboardingScreen({ onDone }) {
   const [index, setIndex] = useState(0);
+  const [slideWidth, setSlideWidth] = useState(0);
   const scrollRef = useRef(null);
 
   const goTo = (i) => {
     setIndex(i);
-    scrollRef.current?.scrollTo({ x: i * width, animated: true });
+    if (slideWidth) scrollRef.current?.scrollTo({ x: i * slideWidth, animated: true });
   };
 
   const next = () => {
@@ -42,20 +41,21 @@ export function OnboardingScreen({ onDone }) {
 
   return (
     <View style={s.container}>
-      <ScrollView
-        ref={scrollRef}
-        horizontal pagingEnabled scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        style={s.scroll}
-      >
-        {SLIDES.map((slide, i) => (
-          <View key={i} style={s.slide}>
-            <Text style={s.icon}>{slide.icon}</Text>
-            <Text style={s.title}>{slide.title}</Text>
-            <Text style={s.body}>{slide.body}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      <View style={s.scrollWrapper} onLayout={(e) => setSlideWidth(e.nativeEvent.layout.width)}>
+        <ScrollView
+          ref={scrollRef}
+          horizontal pagingEnabled scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+        >
+          {SLIDES.map((slide, i) => (
+            <View key={i} style={[s.slide, slideWidth ? { width: slideWidth } : null]}>
+              <Text style={s.icon}>{slide.icon}</Text>
+              <Text style={s.title}>{slide.title}</Text>
+              <Text style={s.body}>{slide.body}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
 
       <View style={s.dots}>
         {SLIDES.map((_, i) => (
@@ -79,9 +79,9 @@ export function OnboardingScreen({ onDone }) {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#1a1a2e", alignItems: "center", justifyContent: "center", paddingBottom: 60 },
-  scroll:    { flexGrow: 0 },
-  slide:     { width, paddingHorizontal: 40, alignItems: "center" },
+  container:   { flex: 1, backgroundColor: "#1a1a2e", alignItems: "center", justifyContent: "center", paddingBottom: 60 },
+  scrollWrapper:{ alignSelf: "stretch", overflow: "hidden" },
+  slide:        { paddingHorizontal: 40, alignItems: "center" },
   icon:      { fontSize: 72, marginBottom: 24 },
   title:     { color: "#fff", fontSize: 22, fontWeight: "bold", textAlign: "center", marginBottom: 16 },
   body:      { color: "#aaa", fontSize: 15, lineHeight: 24, textAlign: "center" },

@@ -1,7 +1,7 @@
 // Single place to update app-wide constants before publishing.
 // Replace PRIVACY_POLICY_URL with your hosted URL (GitHub Pages, your website, etc.)
 export const PRIVACY_POLICY_URL =
-  "https://rameshashok.github.io/stayawake/privacy";
+  "https://github.com/rameshashok/StayAwake2/blob/main/PRIVACY_POLICY.md";
 
 export const APP_STORE_DESCRIPTION = `
 StayAwake monitors your eyes in real time using your phone's front camera to help detect drowsiness while driving.
